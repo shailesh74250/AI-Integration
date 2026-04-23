@@ -135,3 +135,53 @@ HUGGINGFACE_API_KEY=hf_your_token_here
 ```
 
 This enables direct video file generation (base64 encoded MP4).
+
+## Free image effects API
+
+This project also supports image post-processing with Sharp. This is useful for blur, grayscale, sharpening, tinting, resizing, brightness changes, and simple background color replacement for transparent images.
+
+### Apply image effects
+
+`POST /image-effects`
+
+Request body:
+
+```json
+{
+	"imageUrl": "https://image.pollinations.ai/prompt/astronaut%20cat?width=512&height=512",
+	"blur": 6,
+	"grayscale": false,
+	"sharpen": true,
+	"brightness": 1.1,
+	"tint": "#7dd3fc",
+	"backgroundColor": "#ffffff",
+	"width": 512,
+	"height": 512,
+	"format": "jpeg",
+	"quality": 90
+}
+```
+
+Example with curl:
+
+```bash
+curl -X POST http://localhost:8080/image-effects \
+	-H "Content-Type: application/json" \
+	-d '{"imageUrl":"https://image.pollinations.ai/prompt/city%20skyline?width=512&height=512","blur":8,"format":"jpeg"}' \
+	--output blurred-image.jpg
+```
+
+Example for simple background color change on transparent images:
+
+```bash
+curl -X POST http://localhost:8080/image-effects \
+	-H "Content-Type: application/json" \
+	-d '{"imageUrl":"https://example.com/logo.png","backgroundColor":"#f8fafc","format":"png"}' \
+	--output image-with-background.png
+```
+
+Notes:
+
+- `backgroundColor` only affects transparent areas. It does not do AI background removal.
+- Response is binary image data, not JSON.
+- Supported output formats are `jpeg`, `png`, and `webp`.

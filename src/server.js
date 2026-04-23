@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
+const sharp = require("sharp");
 
 const app = express();
 const DEFAULT_WIDTH = 512;
@@ -184,6 +185,128 @@ app.post("/generate-video", async (req, res) => {
   }
 });
 
+app.post("/image-effects", async (req, res) => {
+  const {
+    imageUrl,
+    blur,
+    grayscale = false,
+    sharpen = false,
+    brightness,
+    tint,
+    backgroundColor,
+    width,
+    height,
+    format = "jpeg",
+    quality = 90,
+  } = req.body;
+
+  if (!imageUrl) {
+    return res.status(400).json({ error: "imageUrl is required" });
+  }
+
+  const outputFormat = String(format).toLowerCase();
+  const supportedFormats = ["jpeg", "png", "webp"];
+
+  if (!supportedFormats.includes(outputFormat)) {
+    return res.status(400).json({
+      error: `format must be one of: ${supportedFormats.join(", ")}`,
+    });
+  }
+
+  try {
+    const response = await fetch(imageUrl);
+
+    if (!response.ok) {
+      return res.status(400).json({
+        error: "Failed to fetch image from imageUrl",
+      });
+    }
+
+    const imageBuffer = Buffer.from(await response.arrayBuffer());
+    let image = sharp(imageBuffer, { failOn: "none" });
+
+    const parsedWidth = width === undefined ? undefined : Number(width);
+    const parsedHeight = height === undefined ? undefined : Number(height);
+
+    if (
+      (parsedWidth !== undefined && (!Number.isInteger(parsedWidth) || parsedWidth <= 0)) ||
+      (parsedHeight !== undefined && (!Number.isInteger(parsedHeight) || parsedHeight <= 0))
+    ) {
+      return res.status(400).json({
+        error: "width and height must be positive integers when provided",
+      });
+    }
+
+    if (parsedWidth || parsedHeight) {
+      image = image.resize(parsedWidth, parsedHeight, { fit: "cover" });
+    }
+
+    if (blur !== undefined) {
+      const blurValue = Number(blur);
+
+      if (Number.isNaN(blurValue) || blurValue < 0) {
+        return res.status(400).json({ error: "blur must be a non-negative number" });
+      }
+
+      if (blurValue > 0) {
+        image = image.blur(Math.min(blurValue, 20));
+      }
+    }
+
+    if (grayscale) {
+      image = image.grayscale();
+    }
+
+    if (sharpen) {
+      image = image.sharpen();
+    }
+
+    if (brightness !== undefined) {
+      const brightnessValue = Number(brightness);
+
+      if (Number.isNaN(brightnessValue) || brightnessValue <= 0) {
+        return res.status(400).json({
+          error: "brightness must be a positive number",
+        });
+      }
+
+      image = image.modulate({ brightness: brightnessValue });
+    }
+
+    if (tint) {
+      image = image.tint(String(tint));
+    }
+
+    if (backgroundColor) {
+      image = image.flatten({ background: String(backgroundColor) });
+    }
+
+    const parsedQuality = Number(quality);
+    const normalizedQuality = Number.isInteger(parsedQuality)
+      ? Math.min(Math.max(parsedQuality, 1), 100)
+      : 90;
+
+    let outputBuffer;
+    let contentType;
+
+    if (outputFormat === "png") {
+      outputBuffer = await image.png().toBuffer();
+      contentType = "image/png";
+    } else if (outputFormat === "webp") {
+      outputBuffer = await image.webp({ quality: normalizedQuality }).toBuffer();
+      contentType = "image/webp";
+    } else {
+      outputBuffer = await image.jpeg({ quality: normalizedQuality }).toBuffer();
+      contentType = "image/jpeg";
+    }
+
+    res.setHeader("Content-Type", contentType);
+    return res.send(outputBuffer);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/", (req, res) => {
   res.json({
     message: "AI Integration server is running",
@@ -191,8 +314,9 @@ app.get("/", (req, res) => {
       "POST /generate-image",
       "POST /generate-content",
       "POST /generate-video",
+      "POST /image-effects",
     ],
-    provider: "free (pollinations + huggingface)",
+    provider: "free (pollinations + huggingface + sharp)",
   });
 });
 
